@@ -65,7 +65,7 @@ class Post(db.Model, SerializerMixin):
    updated_at = db.Column(db.DateTime, onupdate=db.func.now())  
 
    user = db.relationship("User", back_populates="posts")
-   comments = db.relationship("Comment", back_populates='stories', cascade="all, delete-orphan")  
+   comments = db.relationship("Comment", back_populates='posts', cascade="all, delete-orphan")  
    
    tags = db.relationship("Tag", secondary=post_tags, back_populates="posts")  
    genres = db.relationship("Genre", secondary=post_genres, back_populates="posts")
@@ -133,5 +133,5 @@ class Genre(db.Model, SerializerMixin):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String, unique=True, nullable=False)
 
-    posts = db.relationship("Post", secondary=post_genres, back_populates="generes")
+    posts = db.relationship("Post", secondary=post_genres, back_populates="genres")
 
