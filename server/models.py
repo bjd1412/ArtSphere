@@ -17,7 +17,7 @@ post_genres = db.Table("post_genres",
 class User(db.Model, SerializerMixin):
     __tablename__="users"
 
-    serialize_rules = ("-comments",)
+    serialize_rules = ("-comments", "posts",)
 
 
     id = db.Column(db.Integer, primary_key=True)
@@ -54,7 +54,7 @@ class User(db.Model, SerializerMixin):
 class Post(db.Model, SerializerMixin):  
    __tablename__="posts"  
   
-   serialize_rules = ("-comments","-user",)  
+   serialize_rules = ("-comments","-user", "tags", "genres")  
   
    id = db.Column(db.Integer, primary_key=True) 
    image = db.Column(db.String) 
@@ -91,7 +91,7 @@ class Post(db.Model, SerializerMixin):
 class Comment(db.Model, SerializerMixin):
     __tablename__="comments"
 
-    serialize_rules = ("-user.comments", "-text.comments", "post_id", "-posts",)
+    serialize_rules = ("-user", "-posts", "post_id")
 
     id = db.Column(db.Integer, primary_key=True)
     comment = db.Column(db.String)
@@ -119,6 +119,8 @@ class Tag(db.Model, SerializerMixin):
 
     __tablename__ = "tags"
 
+    serialize_rules = ("posts",)
+
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String, unique=True)
@@ -128,6 +130,8 @@ class Tag(db.Model, SerializerMixin):
 class Genre(db.Model, SerializerMixin):
 
     __tablename__ = "genres"
+
+    serialize_rules = ("posts",)
 
 
     id = db.Column(db.Integer, primary_key=True)

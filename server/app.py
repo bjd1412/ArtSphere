@@ -7,7 +7,6 @@ from models import User, Post, Comment, post_tags, post_genres, Tag, Genre
 
 bcrypt.init_app(app)
 
-# Views go here!
 
 @app.route('/')
 def index():
@@ -43,7 +42,7 @@ class Username(Resource):
         if username and username != "null":
             user = User.query.filter(User.username==username).first()
             if user:
-                return make_response(user.to_dict(), 200)
+                return make_response(user.to_dict(rules=("-posts",)), 200)
             else:
                 return make_response({"Error": "User not found"}, 404)
         else:
@@ -120,15 +119,20 @@ class CheckSession(Resource):
  
 class Posts(Resource):
 
-    def get(self):
-        post = Post.query.all()    
-        posts = []    
-        for write in post:  
-            post_dict = write.to_dict(rules=("-comments",))  
-            if write.user:  
-                story_dict["user"] = write.user.to_dict(rules=("-posts",))  
-            posts.append(post_dict)    
-        return make_response(posts, 200)
+    def get(self):  
+        posts = Post.query.all()  
+        response = []  
+        for post in posts:  
+            post_dict = post.to_dict(rules=("-comments", "-user", "-tags", "-genres", "-user_id",))  
+            if post.user:
+                post_dict["user"] = {"id": post.user.id, "username": post.user.username}  
+            if post.tags:  
+                post_dict["tags"] = [{"id": tag.id, "name": tag.name} for tag in post.tags]  
+            if post.genres:  
+                post_dict["genres"] = [{"id": genre.id, "name": genre.name} for genre in post.genres]  
+            response.append(post_dict)  
+        return make_response(response, 200)
+
   
     def post(self):
 
@@ -144,7 +148,7 @@ class Posts(Resource):
             )   
             db.session.add(new_post)   
             db.session.commit()   
-            return make_response(new_story.to_dict(rules=("-comments",)), 200)   
+            return make_response(new_post.to_dict(rules=("-comments", "-user", "-tags", "-genres", "-user_id",)), 200)   
         except Exception as e:
             print(e)   
             return make_response({"Error": str(e)}, 400)  
@@ -154,7 +158,7 @@ class Post_ID(Resource):
     def get(self, id):
         post = Post.query.filter(Post.id == id).first()  
         if post:  
-            post_dict = post.to_dict(rules=("-comments",))
+            post_dict = post.to_dict(rules=("-comments","-user", "-tags", "-genres", "-user_id",))
             if post.user:
                 post_dict["user"] = post.user.to_dict(rules=("-posts",))    
             return make_response(post_dict, 200)  
@@ -174,7 +178,7 @@ class Post_ID(Resource):
                             return make_response({"Error": "Post cannot be empty"}, 400)  
                         setattr(post, attr, data[attr])  
                     db.session.commit()  
-                    return make_response(post.to_dict(rules=("-comments",)), 202)  
+                    return make_response(post.to_dict(rules=("-comments", "-user", "-tags", "-genres", "-user_id",)), 202)  
                 except:  
                     return make_response({"Error": "Validation Error"}, 400)  
             else:  
@@ -202,11 +206,149 @@ class PostsByUser(Resource):
         user = User.query.filter(User.username==username).first()  
         if user:  
             posts = Post.query.filter(Post.user_id==user.id).all()  
-            return make_response([post.to_dict(rules=("-user","-comments")) for post in posts], 200)  
+            return make_response([post.to_dict(rules=("-user", "-comments", "-tags", "-genres")) for post in posts], 200)  
         else:  
             return make_response({"Error": "User not found"}, 404)  
   
+  
+class Comments(Resource):
 
+    def get(self):    
+        comments = Comment.query.all()    
+        response = [comment.to_dict(rules=("-text", "-user")) for comment in comments]  
+        return make_response(response, 200)  
+
+    def post(self):  
+        if 'user_id' not in session:  
+            return make_response({"Error": "Not logged in"}, 401)  
+        data = request.form   
+        try:   
+            new_comment = Comment(comment=data["comment"], post_id=data["post_id"], user_id=session['user_id'])
+            db.session.add(new_comment)   
+            db.session.commit()
+            return make_response(new_comment.to_dict(rules=("-posts",)), 200)
+        except:   
+            return make_response({"Error": "Validation Error"}, 400)  
+        
+
+class CommentResource(Resource):
+
+    def get(self, id):
+        comment = Comment.query.filter_by(id=id).first()  
+        if comment:  
+            return make_response(comment.to_dict(rules=("-text", "-user")), 200)  
+        else:  
+            return make_response({"Error": "Comment not found"}, 404)  
+  
+    def patch(self, id):
+        comment = Comment.query.filter(Comment.id == id).first()  
+        data = request.form  
+        if comment:
+            try:  
+                for attr in data:  
+                    setattr(comment, attr, data[attr])  
+                db.session.commit()  
+                return make_response(comment.to_dict(), 200)  
+            except:  
+                return make_response({"Error": "Validation Error"}, 400)  
+        else:  
+            return make_response({"Error": "Comment not found"}, 404)  
+  
+    def delete(self, id):
+        comment = Comment.query.filter(Comment.id==id).first()  
+        if comment:  
+            if 'user_id' in session and comment.user_id == session['user_id']:  
+                db.session.query(Comment).filter(Comment.id==id).delete()  
+                db.session.commit()  
+                return make_response({"message": "Comment deleted successfully"}, 200)  
+            else:  
+                return make_response({"Error": "Not Authorized to delete this comment"}, 401)  
+        else:  
+            return make_response({"Error": "Comment not found."}, 404)
+  
+class CommentsByPostID(Resource):  
+    def get(self, post_id):
+        comments = Comment.query.filter(Comment.post_id == post_id).all()  
+        return make_response([comment.to_dict(rules=("-text", "-user",)) for comment in comments], 200)  
+
+class Tags(Resource):
+
+    def get(self):
+        tags = Tag.query.all()
+        response = [tag.to_dict(rules=("-posts",)) for tag in tags]
+        return make_response(response, 200)
+
+    def post(self):
+        if 'user_id' not in session:  
+            return make_response({"Error": "Not logged in"}, 401)  
+        data = request.form   
+        try:   
+            new_tag = Tag(name=data["name"])
+            db.session.add(new_tag)   
+            db.session.commit()
+            return make_response(new_tag.to_dict(rules=("-posts",)), 200)
+        except:   
+            return make_response({"Error": "Validation Error"}, 400)  
+        
+        
+    
+class Tags_ID(Resource):
+
+    def get(self, id):
+        tag = Tag.query.filter(Tag.id == id).first()
+        if tag:
+            return make_response(tag.to_dict(rules=("-posts",)))
+        else:
+            return make_response({"Error": "Validation Error"})
+
+    def delete(self, id):
+        tag = Tag.query.filter(Tag.id == id).first()
+        if tag:
+            db.session.delete(tag)
+            db.session.commit()
+            return make_response({"message": "Tag deleted successfully"}, 200)
+        else:
+            return make_response({"Error": "Genre does not exist"}, 404)
+
+class Genres(Resource):
+    
+    def get(self):
+        genres = Genre.query.all()
+        response = [genre.to_dict(rules=("-posts",)) for genre in genres]
+        return make_response(response, 200)
+
+    def post(self):
+        if 'user_id' not in session:  
+            return make_response({"Error": "Not logged in"}, 401)  
+        data = request.form   
+        try:   
+            new_genre = Genre(name=data["name"])
+            db.session.add(new_genre)   
+            db.session.commit()
+            return make_response(new_genre.to_dict(rules=("-posts",)), 200)
+        except:   
+            return make_response({"Error": "Validation Error"}, 400)
+
+class Genre_ID(Resource):
+    
+    def get(self, id):
+        genre = Genre.query.filter_by(id=id).first()
+        if genre:
+            return make_response(genre.to_dict(rules=("-posts",)))
+        else:
+            return make_response({"Error": "Validation Error"})
+
+    def delete(self, id):
+        genre = Genre.query.filter(Genre.id == id).first()
+        if genre:
+            db.session.delete(genre)
+            db.session.commit()
+            return make_response({"message": "Genre deleted successfully"}, 200)
+        else:
+            return make_response({"Error": "Genre does not exist"}, 404)
+
+
+    
 
 
 
@@ -218,7 +360,14 @@ api.add_resource(Login, '/login')
 api.add_resource(Logout, '/logout') 
 api.add_resource(Posts, '/posts')
 api.add_resource(Post_ID, '/posts/<int:id>')
-api.add_resource(PostsByUser, '/posts/by-user/<string:username>')  
+api.add_resource(PostsByUser, '/posts/by-user/<string:username>')
+api.add_resource(Tags, '/tags')
+api.add_resource(Tags_ID, '/tags/<int:id>')
+api.add_resource(Genres, '/genres')
+api.add_resource(Genre_ID, '/genres/<int:id>')
+api.add_resource(Comments, '/comments')  
+api.add_resource(CommentResource, '/comments/<int:id>')  
+api.add_resource(CommentsByPostID, '/comments/by-post/<int:post_id>')  
 
 
 
